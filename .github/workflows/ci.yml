@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ "main" ]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        run: python -m pip install -U uv
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-${{ matrix.python-version }}-
+
+      # Use uv sync to create & populate a venv based on pyproject.toml + uv.lock
+      - name: Sync dependencies (locked)
+        run: uv sync --dev --frozen
+        env:
+          UV_SYSTEM_PYTHON: "0"   # ensure a project venv is used (not system Python)
+
+      - name: Verify project import
+        run: uv run python -c "import toycalc, sys; print('ok:', toycalc.__version__ if hasattr(toycalc,'__version__') else 'no __version__'); print(sys.executable)"
+
+      - name: Lint (ruff)
+        run: uv run ruff check src tests
+
+      - name: Format check (black)
+        run: uv run black --check src tests
+
+      - name: Tests + coverage
+        id: tests_cov
+        run: |
+          uv run coverage run -m pytest
+          uv run coverage report
+
+      # Only generate HTML/XML coverage if tests step succeeded
+      - name: Generate coverage HTML
+        if: ${{ steps.tests_cov.outcome == 'success' }}
+        run: uv run coverage html
+
+      # Upload HTML as an artifact so you can download & view locally
+      - name: Upload coverage HTML
+        if: ${{ steps.tests_cov.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: htmlcov/
+
+      # Build distributables using uv
+      - name: Build dist
+        run: uv build
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: dist/
+
