@@ -1,0 +1,50 @@
+# build system tells uv how to build system - in this case we use hatchling, modern and lightweight
+# build systems in python end up creating a standarized format for your project (either a .tar.gz or 
+# a .whl file)
+# this tells uv to build the project using hatchling
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "toycalc"
+version = "0.1.0"
+description = "toycalc application to test CI/CD"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "black>=25.9.0",
+    "coverage>=7.11.0",
+    "pytest>=8.4.2",
+    "ruff>=0.14.0",
+]
+
+# the .scripts is the entry point of the script. Basically, it creates an executable of the same name
+# `toycalc`: callable from anywhere. In this case, we are saying that when we call the executable, 
+# it should call main in cli.py
+[project.scripts]
+toycalc = "toycalc.cli:main"
+
+# options for pytest
+[tool.pytest.ini_options]
+addopts = "-q --maxfail=1 --disable-warnings"
+testpaths = ["tests"]
+
+# options for coverage run
+[tool.coverage.run]
+branch = true
+source = ["toycalc"]
+
+# options for coverage report
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+
+# options for black formatter
+[tool.black]
+line-length = 100
+
+# options for the ruff linter
+[tool.ruff]
+line-length = 100
+lint.select = ["E","F","I"]
